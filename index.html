@@ -8,7 +8,6 @@
   <style>
     body {
       margin: 0;
-      cursor: none;
     }
   </style>
 </head>
@@ -32,7 +31,7 @@
       vec3 color = vec3(0.0);
       
       // screen curvature
-      vec2 uv = (gl_FragCoord.xy / uWindowResolution * 2.0 - 1.0);
+      vec2 uv = (gl_FragCoord.xy / uWindowResolution * 2.0 - 1.0) * 1.05;
       uv.x *= 1.0 + pow(abs(uv.y) / 4.0, 2.0);
       uv.y *= 1.0 + pow(abs(uv.x) / 4.0, 2.0);
       uv = (uv + 1.0) / 2.0;
@@ -53,13 +52,10 @@
         float dot1 = smoothstep(dotSize, dotSize * 0.9, length(dotCoord));
         vec2 greenOffset = vec2(0.0, 0.33);
         float greenDot = smoothstep(dotSize, dotSize * 0.9, length(fract(dotUV + greenOffset) - 0.5));
-        color = mix(color, color * vec3(dot1, greenDot, dot1), 0.5);
+        color = mix(color, color * vec3(dot1, greenDot, dot1), 0.3);
     
         // noise
-        color += hash12(floor(uv * uImageResolution * 4.0)) * 0.03;
-    
-        // scanlines
-        color -= sin(uv.y * uImageResolution.y * 4.0) * 0.01;
+        color += hash12(floor(uv * uImageResolution * 4.0)) * 0.01 + 0.01;
     
         // vignette
         color *= 1.0 - length((uv - 0.5) * 1.2);
@@ -138,9 +134,6 @@
     let uImagePixelData2 = new Uint8Array(imageWidth * imageHeight * 4);
     let useImage1 = true;
 
-    let keys = {};
-    document.onkeydown = e => keys[e.code] = true;
-    document.onkeyup = e => delete keys[e.code];
     let mouse = {
       x: 0,
       y: 0
@@ -150,10 +143,50 @@
       mouse.y = Math.floor(e.clientY / windowHeight * imageHeight);
     }
 
-    function render(useImage1 = true) {
-      const pixelData = useImage1 ? uImagePixelData : uImagePixelData2;
+    function drawTri(verts, pixelData, r, g, b) {
+      let x0 = verts[0], y0 = verts[1];
+      let x1 = verts[2], y1 = verts[3];
+      let x2 = verts[4], y2 = verts[5];
+      if (y1 < y0) [x0, x1, y0, y1] = [x1, x0, y1, y0];
+      if (y2 < y0) [x0, x2, y0, y2] = [x2, x0, y2, y0];
+      if (y2 < y1) [x1, x2, y1, y2] = [x2, x1, y2, y1];
+      let dx01 = x1 - x0, dy01 = y1 - y0, dx02 = x2 - x0, dy02 = y2 - y0;
+      let dx12 = x2 - x1, dy12 = y2 - y1;
+      let sx = x0, ex = x0;
+      for (let y = y0; y <= y2; y++) {
+        if (y < y1)
+          sx = x0 + (y - y0) * dx01 / dy01;
+        else
+          sx = x1 + (y - y1) * dx12 / dy12;
+        ex = x0 + (y - y0) * dx02 / dy02;
+        if (sx > ex) [sx, ex] = [ex, sx];
+        for (let x = Math.ceil(sx); x <= Math.floor(ex); x++) {
+          let index = (x + y * imageWidth) * 4;
+          pixelData[index + 0] = r;
+          pixelData[index + 1] = g;
+          pixelData[index + 2] = b;
+        }
+      }
+    }
 
-      pixelData.fill(0);
+    function update(pixelData) {
+      for (let y = 0; y < imageHeight; y++) {
+        for (let x = 0; x < imageWidth; x++) {
+          let index = (x + y * imageWidth) * 4;
+
+          if (x < imageWidth / 2) {
+            pixelData[index + 0] = 0;
+            pixelData[index + 1] = 0;
+            pixelData[index + 2] = 0;
+          } else {
+            pixelData[index + 0] = 255;
+            pixelData[index + 1] = 255;
+            pixelData[index + 2] = 255;
+          }
+        }
+      }
+      drawTri([10, 10, 20, 30, 60, 10], pixelData, 255, 0, 0);
+      drawTri([10+200, 10+150, 20+200, 30+150, 60+200, 10+150], pixelData, 0, 100, 255);
 
       const squareSize = 10;
       const halfSize = Math.floor(squareSize / 2);
@@ -161,13 +194,17 @@
       for (let y = 0; y < imageHeight; y++) {
         for (let x = 0; x < imageWidth; x++) {
           if (x == mouse.x || y == mouse.y || (x >= mouse.x - halfSize && x <= mouse.x + halfSize && (y == mouse.y - halfSize || y == mouse.y + halfSize)) || (y >= mouse.y - halfSize && y <= mouse.y + halfSize && (x == mouse.x - halfSize || x == mouse.x + halfSize))) {
-            pixelData[(x + y * imageWidth) * 4 + 0] = 255;
+            pixelData[(x + y * imageWidth) * 4 + 0] = 0;
             pixelData[(x + y * imageWidth) * 4 + 1] = 255;
-            pixelData[(x + y * imageWidth) * 4 + 2] = 255;
+            pixelData[(x + y * imageWidth) * 4 + 2] = 0;
           }
         }
       }
+    }
 
+    function render(useImage1 = true) {
+      const pixelData = useImage1 ? uImagePixelData : uImagePixelData2;
+      update(pixelData);
       gl.bindTexture(gl.TEXTURE_2D, useImage1 ? uImage : uImage2);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageWidth, imageHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
       let uImageToUse = useImage1 ? uImage : uImage2;
