@@ -1,0 +1,197 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3d</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+
+let canvas = document.querySelector("#canvas");
+canvas.width = 16 * 48;
+canvas.height = 10 * 48;
+let ctx = canvas.getContext("2d");
+ctx.lineWidth = 0.2;
+
+let camera = {
+  focalLength: 500,
+  translation: [0, -2, 0],
+  translationVel: [0, 0, 0],
+  rotation: [0, 0],
+  rotationVel: [0, 0]
+};
+
+let verticies = [
+  [-0.5, -0.5, -0.5],
+  [0.5, -0.5, -0.5],
+  [0.5, 0.5, -0.5],
+  [-0.5, 0.5, -0.5],
+  [-0.5, -0.5, 0.5],
+  [0.5, -0.5, 0.5],
+  [0.5, 0.5, 0.5],
+  [-0.5, 0.5, 0.5],
+];
+let faces = [
+  [0, 4, 7, 3],
+  [0, 4, 5, 1],
+  [0, 1, 2, 3],
+  [1, 5, 6, 2],
+  [3, 2, 6, 7],
+  [4, 5, 6, 7],
+];
+let normals = [
+  [-1, 0, 0],
+  [0, -1, 0],
+  [0, 0, -1],
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+];
+
+let colors = ["#b7af99", "#c7bfa8", "#d4caa8", "#a8a397", "#a8a397", "#a8a397"];
+let blocks = [];
+for (let i = 0; i < 10 * 10; i++) {
+  blocks.push([i % 10, 0, Math.floor(i / 10)]);
+}
+blocks.push([5, -1, 5]);
+blocks.push([5, -2, 5]);
+blocks.push([5, -3, 5]);
+blocks.push([2, -1, 5]);
+blocks.push([2, -2, 5]);
+blocks.push([2, -3, 5]);
+blocks.push([3, -4, 5]);
+blocks.push([4, -4, 5]);
+
+document.onmousedown = () => {
+  canvas.requestPointerLock();
+};
+
+document.onmousemove = e => {
+  camera.rotationVel[0] += e.movementY * 0.0005;
+  camera.rotationVel[1] -= e.movementX * 0.0005;
+};
+
+let keys = {};
+document.onkeydown = e => keys[e.code] = true;
+document.onkeyup = e => delete keys[e.code];
+
+function run() {
+  requestAnimationFrame(run);
+
+  camera.rotation[0] += camera.rotationVel[0];
+  camera.rotation[1] += camera.rotationVel[1];
+
+  camera.rotationVel[0] *= 0.9;
+  camera.rotationVel[1] *= 0.9;
+
+  if (camera.rotation[0] > Math.PI / 2) {
+    camera.rotation[0] = Math.PI / 2;
+    camera.rotationVel[0] = 0;
+  }
+  else if (camera.rotation[0] < -Math.PI / 2) {
+    camera.rotation[0] = -Math.PI / 2;
+    camera.rotationVel[0] = 0;
+  }
+
+  if (keys.KeyA && !keys.KeyD) {
+    camera.translationVel[0] -= 0.01 * Math.cos(camera.rotation[1]);
+    camera.translationVel[2] -= 0.01 * Math.sin(camera.rotation[1]);
+  }
+  if (keys.KeyD && !keys.KeyA) {
+    camera.translationVel[0] += 0.01 * Math.cos(camera.rotation[1]);
+    camera.translationVel[2] += 0.01 * Math.sin(camera.rotation[1]);
+  }
+  if (keys.KeyW && !keys.KeyS) {
+    camera.translationVel[0] -= 0.01 * Math.sin(camera.rotation[1]);
+    camera.translationVel[2] += 0.01 * Math.cos(camera.rotation[1]);
+  }
+  if (keys.KeyS && !keys.KeyW) {
+    camera.translationVel[0] += 0.01 * Math.sin(camera.rotation[1]);
+    camera.translationVel[2] -= 0.01 * Math.cos(camera.rotation[1]);
+  }
+  if (keys.Space && !keys.ShiftLeft) {
+    camera.translationVel[1] -= 0.01;
+  }
+  if (keys.ShiftLeft && !keys.Space) {
+    camera.translationVel[1] += 0.01;
+  }
+
+  camera.translation[0] += camera.translationVel[0];
+  camera.translation[1] += camera.translationVel[1];
+  camera.translation[2] += camera.translationVel[2];
+  camera.translationVel[0] *= 0.9;
+  camera.translationVel[1] *= 0.9;
+  camera.translationVel[2] *= 0.9;
+
+  let cosCameraRotation0 = Math.cos(camera.rotation[0]);
+  let sinCameraRotation0 = Math.sin(camera.rotation[0]);
+  let cosCameraRotation1 = Math.cos(camera.rotation[1]);
+  let sinCameraRotation1 = Math.sin(camera.rotation[1]);
+
+  ctx.fillStyle = "#416782";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  blocks.sort((a, b) => {
+    let aDistance = (a[0] - camera.translation[0]) * (a[0] - camera.translation[0]) + (a[1] - camera.translation[1]) * (a[1] - camera.translation[1]) + (a[2] - camera.translation[2]) * (a[2] - camera.translation[2]);
+    let bDistance = (b[0] - camera.translation[0]) * (b[0] - camera.translation[0]) + (b[1] - camera.translation[1]) * (b[1] - camera.translation[1]) + (b[2] - camera.translation[2]) * (b[2] - camera.translation[2]);
+    return bDistance - aDistance;
+  });
+
+  for (let i = 0; i < blocks.length; i++) {
+    let x = -camera.translation[0] + blocks[i][0];
+    let y = -camera.translation[1] + blocks[i][1];
+    let z = -camera.translation[2] + blocks[i][2];
+    let newX = x * cosCameraRotation1 + z * sinCameraRotation1;
+    let newZ = -x * sinCameraRotation1 + z * cosCameraRotation1;
+    x = newX;
+    z = newZ;
+    let newY = y * cosCameraRotation0 - z * sinCameraRotation0;
+    newZ = y * sinCameraRotation0 + z * cosCameraRotation0;
+    y = newY;
+    z = newZ;
+    if (z <= 0)
+      continue;
+
+    let tVerticies = [];
+    let pVerticies = [];
+
+    for (let j = 0; j < verticies.length; j++) {
+      let x = verticies[j][0] - camera.translation[0] + blocks[i][0];
+      let y = verticies[j][1] - camera.translation[1] + blocks[i][1];
+      let z = verticies[j][2] - camera.translation[2] + blocks[i][2];
+      let newX = x * cosCameraRotation1 + z * sinCameraRotation1;
+      let newZ = -x * sinCameraRotation1 + z * cosCameraRotation1;
+      x = newX;
+      z = newZ;
+      let newY = y * cosCameraRotation0 - z * sinCameraRotation0;
+      newZ = y * sinCameraRotation0 + z * cosCameraRotation0;
+      y = newY;
+      z = newZ;
+      tVerticies.push([x, y, z]);
+      x = x * camera.focalLength / Math.max(z, 0.1);
+      y = y * camera.focalLength / Math.max(z, 0.1);
+      pVerticies.push([x + canvas.width / 2, y + canvas.height / 2]);
+    }
+
+    for (let j = 0; j < faces.length; j++) {
+      if (j < 3 ? normals[j][j % 3] - camera.translation[j % 3] + blocks[i][j % 3] > -0.5 : normals[j][j % 3] - camera.translation[j % 3] + blocks[i][j % 3] < 0.5) {
+        ctx.fillStyle = colors[j];
+        ctx.beginPath();
+        ctx.moveTo(pVerticies[faces[j][0]][0], pVerticies[faces[j][0]][1]);
+        ctx.lineTo(pVerticies[faces[j][1]][0], pVerticies[faces[j][1]][1]);
+        ctx.lineTo(pVerticies[faces[j][2]][0], pVerticies[faces[j][2]][1]);
+        ctx.lineTo(pVerticies[faces[j][3]][0], pVerticies[faces[j][3]][1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+run();
+
+  </script>
+</body>
+</html>
